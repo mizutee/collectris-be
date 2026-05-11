@@ -1,0 +1,39 @@
+{
+  "name": "collectrics-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/scripts/migrate.ts",
+    "refresh": "tsx src/scripts/refresh.ts",
+    "refresh:core": "tsx src/scripts/refresh.ts core",
+    "refresh:search": "tsx src/scripts/refresh.ts search",
+    "scrape": "tsx src/scripts/scrape.ts",
+    "worker:dev": "tsx src/worker.ts",
+    "worker": "node dist/worker.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
