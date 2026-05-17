@@ -22,6 +22,7 @@ const schema = z.object({
   SEARCH_PAGE_SIZE: z.coerce.number().int().positive().default(250),
   SEARCH_MAX_PAGES: z.coerce.number().int().positive().default(20),
   CARD_DETAIL_REFRESH_LIMIT: z.coerce.number().int().nonnegative().default(0),
+  EBAY_LISTINGS_REFRESH_LIMIT: z.coerce.number().int().nonnegative().default(25),
   ALLOW_ON_DEMAND_INGEST: envBoolean.default(false)
 });
 

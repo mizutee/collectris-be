@@ -1,6 +1,11 @@
 import cron from "node-cron";
 import { env } from "../config/env.js";
-import { refreshCardDetailsFromLeaderboard, refreshCoreData, refreshSearchIndex } from "../services/ingestService.js";
+import {
+  refreshCardDetailsFromLeaderboard,
+  refreshCardEbayListingsFromLeaderboard,
+  refreshCoreData,
+  refreshSearchIndex
+} from "../services/ingestService.js";
 
 let scrapeRunning = false;
 
@@ -24,6 +29,11 @@ export async function runScrapeJob(reason = "manual") {
     if (env.CARD_DETAIL_REFRESH_LIMIT > 0) {
       const count = await refreshCardDetailsFromLeaderboard(env.CARD_DETAIL_REFRESH_LIMIT);
       console.log(`[scrape] refreshed ${count} card detail pages`);
+    }
+
+    if (env.EBAY_LISTINGS_REFRESH_LIMIT > 0) {
+      const count = await refreshCardEbayListingsFromLeaderboard(env.EBAY_LISTINGS_REFRESH_LIMIT);
+      console.log(`[scrape] refreshed ${count} card eBay listing pages`);
     }
 
     const durationSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);

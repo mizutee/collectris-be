@@ -1,6 +1,7 @@
 import { pool } from "./pool.js";
 
 export type JsonValue = Record<string, unknown> | unknown[];
+export type CardLeaderboardView = "market" | "movement" | "grading";
 
 export async function saveSnapshot(key: string, payload: unknown, sourceUrl: string) {
   await pool.query(
@@ -19,6 +20,156 @@ export async function saveSnapshot(key: string, payload: unknown, sourceUrl: str
 export async function getSnapshot<T = unknown>(key: string): Promise<T | null> {
   const result = await pool.query("select payload from api_snapshots where key = $1", [key]);
   return (result.rows[0]?.payload as T | undefined) ?? null;
+}
+
+export async function getSnapshotRecord<T = unknown>(key: string): Promise<{
+  payload: T;
+  sourceUrl: string;
+  fetchedAt: Date;
+} | null> {
+  const result = await pool.query(
+    "select payload, source_url, fetched_at from api_snapshots where key = $1",
+    [key]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    payload: row.payload as T,
+    sourceUrl: row.source_url,
+    fetchedAt: row.fetched_at
+  };
+}
+
+export async function upsertCardLeaderboardRows(rows: Record<string, unknown>[]) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("truncate card_leaderboard_rows");
+
+    for (const row of rows) {
+      const id = String(row.id ?? "");
+      if (!id) continue;
+
+      await client.query(
+        `
+          insert into card_leaderboard_rows (
+            id,
+            product_name,
+            set_name,
+            set_code,
+            rarity_name,
+            rank_supply_saturation_index,
+            rank_dod_change,
+            rank_psa_10_vs_raw,
+            payload,
+            fetched_at
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, now())
+          on conflict (id) do update set
+            product_name = excluded.product_name,
+            set_name = excluded.set_name,
+            set_code = excluded.set_code,
+            rarity_name = excluded.rarity_name,
+            rank_supply_saturation_index = excluded.rank_supply_saturation_index,
+            rank_dod_change = excluded.rank_dod_change,
+            rank_psa_10_vs_raw = excluded.rank_psa_10_vs_raw,
+            payload = excluded.payload,
+            fetched_at = excluded.fetched_at
+        `,
+        [
+          id,
+          textValue(row["product-name"]),
+          textValue(row["set-name"]),
+          textValue(row["set-code"]),
+          textValue(row["rarity-name"]),
+          intValue(row["rank-supply-saturation-index"]),
+          intValue(row["rank-dod-change"]),
+          intValue(row["rank-psa-10-vs-raw"]),
+          JSON.stringify(row)
+        ]
+      );
+    }
+
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export interface CardLeaderboardRowsParams {
+  view: CardLeaderboardView;
+  q?: string;
+  rarity?: string;
+  limit: number;
+  offset: number;
+}
+
+export async function searchCardLeaderboardRows(params: CardLeaderboardRowsParams) {
+  const clauses: string[] = [`${cardLeaderboardRankColumn(params.view)} is not null`];
+  const values: unknown[] = [];
+
+  if (params.q) {
+    values.push(`%${params.q.toLowerCase()}%`);
+    clauses.push(`(
+      lower(product_name) like $${values.length}
+      or lower(set_name) like $${values.length}
+      or lower(coalesce(set_code, '')) like $${values.length}
+    )`);
+  }
+
+  if (params.rarity) {
+    values.push(params.rarity);
+    clauses.push(`rarity_name = $${values.length}`);
+  }
+
+  const where = `where ${clauses.join(" and ")}`;
+  const rankColumn = cardLeaderboardRankColumn(params.view);
+
+  const totalResult = await pool.query(`select count(*)::int as total from card_leaderboard_rows ${where}`, values);
+
+  values.push(params.limit);
+  values.push(params.offset);
+  const limitIndex = values.length - 1;
+  const offsetIndex = values.length;
+
+  const rowsResult = await pool.query(
+    `
+      select payload
+      from card_leaderboard_rows
+      ${where}
+      order by ${rankColumn} asc
+      limit $${limitIndex}
+      offset $${offsetIndex}
+    `,
+    values
+  );
+
+  return {
+    total: Number(totalResult.rows[0]?.total ?? 0),
+    results: rowsResult.rows.map(row => row.payload)
+  };
+}
+
+export async function getCardLeaderboardRarities() {
+  const result = await pool.query(
+    `
+      select distinct rarity_name
+      from card_leaderboard_rows
+      where rarity_name is not null and rarity_name <> ''
+      order by rarity_name asc
+    `
+  );
+
+  return result.rows.map(row => row.rarity_name).filter(Boolean);
+}
+
+export async function countCardLeaderboardRows() {
+  const result = await pool.query("select count(*)::int as total from card_leaderboard_rows");
+  return Number(result.rows[0]?.total ?? 0);
 }
 
 export async function saveSetDetail(setCode: string, payload: unknown, sourceUrl: string) {
@@ -62,6 +213,25 @@ export async function saveCardDetail(cardId: string, payload: unknown, sourceUrl
 export async function getCardDetail<T = unknown>(cardId: string): Promise<T | null> {
   const result = await pool.query("select payload from card_details where card_id = $1", [cardId]);
   return (result.rows[0]?.payload as T | undefined) ?? null;
+}
+
+export async function getCardDetailRecord<T = unknown>(cardId: string): Promise<{
+  payload: T;
+  sourceUrl: string;
+  fetchedAt: Date;
+} | null> {
+  const result = await pool.query(
+    "select payload, source_url, fetched_at from card_details where card_id = $1",
+    [cardId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    payload: row.payload as T,
+    sourceUrl: row.source_url,
+    fetchedAt: row.fetched_at
+  };
 }
 
 export async function upsertSearchCards(cards: Record<string, unknown>[]) {
@@ -216,4 +386,25 @@ function sortClause(sort?: string) {
     default:
       return "order by coalesce((payload->>'collectrics-raw-price')::numeric, (payload->>'raw-price')::numeric, 0) desc";
   }
+}
+
+function cardLeaderboardRankColumn(view: CardLeaderboardView) {
+  switch (view) {
+    case "movement":
+      return "rank_dod_change";
+    case "grading":
+      return "rank_psa_10_vs_raw";
+    case "market":
+    default:
+      return "rank_supply_saturation_index";
+  }
+}
+
+function textValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function intValue(value: unknown) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? Math.trunc(numberValue) : null;
 }

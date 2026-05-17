@@ -1,6 +1,6 @@
-# collectrics-api
+# Pokistats API
 
-Standalone Express/Postgres backend for Collectrics.
+Standalone Express/Postgres backend for Pokistats.
 
 This service is designed as an owned-data backend, not a request gateway:
 
